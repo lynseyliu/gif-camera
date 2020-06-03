@@ -130,29 +130,39 @@ Capture
 print('begin capture')
 stream = io.BytesIO()
 gif_frames = []
+gif_skip = 2
+skip_count = 0
 
 for frame in camera.capture_continuous(stream, format='jpeg', use_video_port=True):
     stream.seek(0)
     
     image = Image.open(stream)
     draw_current_filter(image)
-    disp_image = image.resize((disp.height, disp.width), Image.NEAREST)
-    disp.ShowImage(disp_image)
-    
-    stream.seek(0)
-    stream.truncate()
 
     # small delay between gif frames
     if len(gif_frames) != 0:
-        time.sleep(1)
+        if skip_count == gif_skip:
+            gif_frames.append(image)
+            # draw gif frame capture indication
+            skip_count = 0
+        else:
+            skip_count += 1
 
-    # process gif on third frame
+    disp_image = image.resize((disp.height, disp.width), Image.NEAREST)
+    disp.ShowImage(disp_image)
+    
+    # clear stream
+    stream.seek(0)
+    stream.truncate()
+
+    # create and upload gif on third frame
     if len(gif_frames) == 2:
         # save frames
         filepath = get_filepath('.gif')
 
         # upload gif and reset
         client.create_photo(tumblr_username, state="published", tags=["GIF"], data=filepath)
+        time.sleep(1)
         gif_frames = []
 
     if buttons_init:
