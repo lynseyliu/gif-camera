@@ -1,23 +1,44 @@
-from imutils import face_utils
-from picamera.array import PiRGBArray
-from picamera import PiCamera
-from PIL import Image, ImageDraw, ImageFont
-from waveshare_2inch_LCD import ST7789
-import cv2 as cv
-import dlib
-import imutils
-import io
-import json
-import numpy as np
 import os
-import pytumblr
-import requests
-import RPi.GPIO as GPIO
+os.chdir('/home/pi/pi-camera')
+
+from waveshare_2inch_LCD import ST7789
+from PIL import Image, ImageDraw, ImageFont
+import threading
 import time
-import uuid
+
+# init display
+disp = ST7789.ST7789()
+disp.Init()
+disp.clear()
 
 # show startup screen
 print('starting up...')
+done_loading = False
+def animate_pie():
+    loading_images = [Image.open('loading/' + str(i) + '.png') for i in range(1, 5)]
+    i = 0
+    while not done_loading:
+        current = loading_images[i % 4]
+        disp.ShowImage(current)
+        i += 1
+        time.sleep(0.1)
+
+# t = threading.Thread(target=animate_pie)
+# t.start()
+
+from imutils import face_utils
+from picamera.array import PiRGBArray
+from picamera import PiCamera
+import cv2 as cv
+import dlib
+import io
+import json
+import numpy as np
+import pytumblr
+import requests
+import RPi.GPIO as GPIO
+import sys
+import uuid
 
 '''
 Initialize face and filters
@@ -63,8 +84,8 @@ def detect_face_landmarks(frame):
     	# determine the facial landmarks for the face region, then
     	# convert the facial landmark (x, y)-coordinates to a NumPy
     	# array
-    	shape = predictor(frame_gray, rect)
-    	shape = face_utils.shape_to_np(shape)
+        shape = predictor(frame_gray, rect)
+        shape = face_utils.shape_to_np(shape)
         faces.append(shape)
 
         '''
@@ -88,17 +109,12 @@ def get_filepath(extension):
     return filepath
 
 '''
-Initialize hardware
+Initialize camera and buttons
 '''
-# init display
-disp = ST7789.ST7789()
-disp.Init()
-disp.clear()
-
 # init camera TODO: rename to viewfinder, init another camera for capture that grabs higher res?
 camera = PiCamera()
-camera.resolution = (disp.height * 2, disp.width * 2)
-camera.framerate = 32
+camera.resolution = (disp.height * 1, disp.width * 1)
+camera.framerate = 15
 time.sleep(0.1) # allow camera to warm up :)
 
 # GPIO settings
@@ -130,25 +146,28 @@ Capture
 print('begin capture')
 stream = io.BytesIO()
 gif_frames = []
-gif_skip = 2
+gif_skip = 1
 skip_count = 0
-
+done_loading = True
 for frame in camera.capture_continuous(stream, format='jpeg', use_video_port=True):
     stream.seek(0)
     
     image = Image.open(stream)
     draw_current_filter(image)
 
-    # small delay between gif frames
+    # skip between gif frames
     if len(gif_frames) != 0:
         if skip_count == gif_skip:
-            gif_frames.append(image)
+            save_image = image.resize((disp.height * 2, disp.width * 2), Image.BICUBIC) 
+            gif_frames.append(save_image)
+            print("frame " + str(len(gif_frames)))
             # draw gif frame capture indication
             skip_count = 0
         else:
             skip_count += 1
 
-    disp_image = image.resize((disp.height, disp.width), Image.NEAREST)
+    # display
+    disp_image = image
     disp.ShowImage(disp_image)
     
     # clear stream
@@ -156,9 +175,10 @@ for frame in camera.capture_continuous(stream, format='jpeg', use_video_port=Tru
     stream.truncate()
 
     # create and upload gif on third frame
-    if len(gif_frames) == 2:
+    if len(gif_frames) == 3:
         # save frames
         filepath = get_filepath('.gif')
+        gif_frames[0].save(filepath, save_all=True, append_images=gif_frames[1:], duration=500, loop=0)
 
         # upload gif and reset
         client.create_photo(tumblr_username, state="published", tags=["GIF"], data=filepath)
@@ -173,7 +193,8 @@ for frame in camera.capture_continuous(stream, format='jpeg', use_video_port=Tru
            
             # save frame
             filepath = get_filepath('.jpg')
-            image.save(filepath, format='JPEG')
+            save_image = image.resize((disp.height * 2, disp.width * 2), Image.BICUBIC) 
+            save_image.save(filepath, format='JPEG')
 
             # upload photo
             client.create_photo(tumblr_username, state="published", tags=[], data=filepath)
@@ -183,7 +204,9 @@ for frame in camera.capture_continuous(stream, format='jpeg', use_video_port=Tru
             # show capturing screen
             print('capturing gif...')
 
-            gif_frames.append(image)
+            save_image = image.resize((disp.height * 2, disp.width * 2), Image.BICUBIC) 
+            gif_frames.append(save_image)
+            print("frame 1")
         
         # filter toggle
         if GPIO.event_detected(26):
