@@ -1,34 +1,11 @@
 import os
 os.chdir('/home/pi/pi-camera')
 
-from waveshare_2inch_LCD import ST7789
-from PIL import Image, ImageDraw, ImageFont
-import threading
-import time
-
-# init display
-disp = ST7789.ST7789()
-disp.Init()
-disp.clear()
-
-# show startup screen
-print('starting up...')
-done_loading = False
-def animate_pie():
-    loading_images = [Image.open('loading/' + str(i) + '.png') for i in range(1, 5)]
-    i = 0
-    while not done_loading:
-        current = loading_images[i % 4]
-        disp.ShowImage(current)
-        i += 1
-        time.sleep(0.1)
-
-# t = threading.Thread(target=animate_pie)
-# t.start()
-
 from imutils import face_utils
 from picamera.array import PiRGBArray
 from picamera import PiCamera
+from PIL import Image, ImageDraw, ImageFont
+from waveshare_2inch_LCD import ST7789
 import cv2 as cv
 import dlib
 import io
@@ -38,7 +15,15 @@ import pytumblr
 import requests
 import RPi.GPIO as GPIO
 import sys
+import threading
+import time
 import uuid
+
+# init display
+disp = ST7789.ST7789()
+disp.Init()
+disp.clear()
+print('starting up...')
 
 '''
 Initialize face and filters
@@ -109,9 +94,9 @@ def get_filepath(extension):
     return filepath
 
 '''
-Initialize camera and buttons
+Initialize
 '''
-# init camera TODO: rename to viewfinder, init another camera for capture that grabs higher res?
+# init camera
 camera = PiCamera()
 camera.resolution = (disp.height * 1, disp.width * 1)
 camera.framerate = 15
@@ -125,9 +110,6 @@ GPIO.add_event_detect(16, GPIO.RISING)
 GPIO.add_event_detect(12, GPIO.RISING)
 buttons_init = False
 
-'''
-Initialize Tumblr
-'''
 # set up pytumblr client
 with open('tumblr_secrets.json') as f:
     secrets = json.load(f)
